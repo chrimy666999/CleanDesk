@@ -62,24 +62,3 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 3. 首次启动后，CleanDesk 会扫描桌面图标并创建默认收纳盒
 
 便携版会在程序目录下创建 `portable-data`，用于保存配置、备份、日志和缓存。
-
-## 上传到 GitHub
-
-如果仓库尚未创建，先在 GitHub 上创建一个空仓库，例如：
-
-```text
-https://github.com/chrimy666999/CleanDesk
-```
-
-然后在项目根目录执行：
-
-```powershell
-git init
-git branch -M main
-git add .
-git commit -m "Initial CleanDesk source release"
-git remote add origin https://github.com/chrimy666999/CleanDesk.git
-git push -u origin main
-```
-
-如果你使用的是其他仓库名，把上面的 `CleanDesk.git` 替换成实际仓库名。
