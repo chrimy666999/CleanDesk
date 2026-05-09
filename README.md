@@ -53,8 +53,6 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 - `dist\CleanDesk-portable\CleanDesk.exe`
 - `dist\CleanDesk-portable-win-x64.zip`
 
-`dist` 是构建产物目录，已经通过 `.gitignore` 排除。建议把生成的 ZIP 上传到 GitHub Releases，而不是提交到源码仓库。
-
 ## 运行便携版
 
 1. 解压 `CleanDesk-portable-win-x64.zip`
