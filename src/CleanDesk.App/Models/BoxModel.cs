@@ -27,12 +27,19 @@ public enum BoxLayoutAlignment
     Bottom
 }
 
+public enum BoxDockEdge
+{
+    Top,
+    Left,
+    Right
+}
+
 public sealed class BoxLayoutPreset
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "自定义";
     public BoxLayoutAlignment Alignment { get; set; } = BoxLayoutAlignment.Left;
-    public int Gap { get; set; } = 8;
+    public int Gap { get; set; } = 18;
     public bool AutoSize { get; set; } = true;
     public bool CollapseEmptyBoxes { get; set; } = true;
 
@@ -61,16 +68,19 @@ public sealed class BoxModel
     public string Name { get; set; } = "新盒子";
     public BoxKind Kind { get; set; } = BoxKind.Normal;
     public DesktopRect Bounds { get; set; } = new();
-    public double Opacity { get; set; } = 0.72;
+    public double Opacity { get; set; } = 0.05;
     public bool IsCollapsed { get; set; }
     public bool HasUserLayout { get; set; }
     public bool IsLocked { get; set; }
     public bool IsVisible { get; set; } = true;
+    public BoxDockEdge DockEdge { get; set; } = BoxDockEdge.Top;
     public BoxDisplayMode DisplayMode { get; set; } = BoxDisplayMode.Icon;
     public string MappedPath { get; set; } = "";
     public string CurrentPath { get; set; } = "";
+    public double TitleLength { get; set; } = 220;
     public double LastExpandedHeight { get; set; } = 260;
     public double LastExpandedWidth { get; set; } = 360;
     public List<string> ItemPaths { get; set; } = [];
+    public List<string> ManualItemPaths { get; set; } = [];
     public List<BoxTabModel> Tabs { get; set; } = [];
 }

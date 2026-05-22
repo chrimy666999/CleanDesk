@@ -16,6 +16,8 @@ public sealed class DeskItem
     public DateTime CreatedUtc { get; set; }
     public DateTime LastWriteUtc { get; set; }
     public DateTime LastAccessUtc { get; set; }
+    public DateTime? LastClickedUtc { get; set; }
     public DateTime? LastOpenedUtc { get; set; }
+    public int ClickCount { get; set; }
     public int OpenCount { get; set; }
 }

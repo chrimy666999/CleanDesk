@@ -13,6 +13,7 @@ public static class DesktopInterop
     private const int LvmGetItemTextW = LvmFirst + 115;
     private const uint LvifText = 0x0001;
     private const int SwHide = 0;
+    private const int SwShowNoActivate = 4;
     private const int SwShow = 5;
     private const int SmtoNormal = 0;
     private const uint ProcessVmOperation = 0x0008;
@@ -29,26 +30,7 @@ public static class DesktopInterop
 
     public static IntPtr FindDesktopListView()
     {
-        EnsureWorkerW();
-
-        var progman = FindWindow("Progman", null);
-        var defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
-
-        if (defView == IntPtr.Zero)
-        {
-            EnumWindows((topHandle, _) =>
-            {
-                var candidate = FindWindowEx(topHandle, IntPtr.Zero, "SHELLDLL_DefView", null);
-                if (candidate == IntPtr.Zero)
-                {
-                    return true;
-                }
-
-                defView = candidate;
-                return false;
-            }, IntPtr.Zero);
-        }
-
+        var defView = FindDesktopDefView();
         if (defView == IntPtr.Zero)
         {
             return IntPtr.Zero;
@@ -65,12 +47,20 @@ public static class DesktopInterop
 
     public static IntPtr FindDesktopHostWindow()
     {
-        EnsureWorkerW();
-
         var progman = FindWindow("Progman", null);
+        if (progman != IntPtr.Zero && FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null) != IntPtr.Zero)
+        {
+            return progman;
+        }
+
         var host = IntPtr.Zero;
         EnumWindows((topHandle, _) =>
         {
+            if (!WindowClassEquals(topHandle, "WorkerW"))
+            {
+                return true;
+            }
+
             var defView = FindWindowEx(topHandle, IntPtr.Zero, "SHELLDLL_DefView", null);
             if (defView == IntPtr.Zero)
             {
@@ -96,7 +86,27 @@ public static class DesktopInterop
     public static bool AreDesktopIconsVisible()
     {
         var listView = FindDesktopListView();
-        return listView == IntPtr.Zero || IsWindowVisible(listView);
+        return listView == IntPtr.Zero || IsWindowVisibleNative(listView);
+    }
+
+    public static bool IsWindowCurrentlyVisible(IntPtr hWnd)
+    {
+        return hWnd != IntPtr.Zero && IsWindowVisibleNative(hWnd);
+    }
+
+    public static bool IsDesktopForeground()
+    {
+        var foreground = GetForegroundWindow();
+        for (var depth = 0; foreground != IntPtr.Zero && depth < 8; depth++, foreground = GetParent(foreground))
+        {
+            var className = GetWindowClassName(foreground);
+            if (className is "Progman" or "WorkerW" or "SHELLDLL_DefView" or "SysListView32")
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static Dictionary<string, DesktopPoint> GetIconPositions()
@@ -189,22 +199,64 @@ public static class DesktopInterop
         }
 
         var style = GetWindowLongPtr(hWnd, GwlExStyle).ToInt64();
-        style |= WsExToolWindow;
-        style &= ~WsExAppWindow;
-        SetWindowLongPtr(hWnd, GwlExStyle, new IntPtr(style));
+        var updatedStyle = style | WsExToolWindow;
+        updatedStyle &= ~WsExAppWindow;
+        if (updatedStyle != style)
+        {
+            SetWindowLongPtr(hWnd, GwlExStyle, new IntPtr(updatedStyle));
+        }
     }
 
-    public static void TryAttachToDesktop(IntPtr hWnd)
+    public static bool IsAttachedToDesktop(IntPtr hWnd)
     {
         if (hWnd == IntPtr.Zero)
         {
-            return;
+            return false;
         }
 
         var host = FindDesktopHostWindow();
+        return host != IntPtr.Zero && GetParent(hWnd) == host;
+    }
+
+    public static IntPtr GetParentWindow(IntPtr hWnd)
+    {
+        return hWnd == IntPtr.Zero ? IntPtr.Zero : GetParent(hWnd);
+    }
+
+    public static bool TryAttachToDesktop(IntPtr hWnd)
+    {
+        return TryAttachToDesktop(hWnd, out _);
+    }
+
+    public static bool TryAttachToDesktop(IntPtr hWnd, out IntPtr host)
+    {
+        if (hWnd == IntPtr.Zero)
+        {
+            host = IntPtr.Zero;
+            return false;
+        }
+
+        EnsureWorkerW();
+        host = FindDesktopHostWindow();
         if (host != IntPtr.Zero)
         {
+            if (GetParent(hWnd) == host)
+            {
+                return true;
+            }
+
             SetParent(hWnd, host);
+            return GetParent(hWnd) == host;
+        }
+
+        return false;
+    }
+
+    public static void ShowNoActivate(IntPtr hWnd)
+    {
+        if (hWnd != IntPtr.Zero)
+        {
+            ShowWindow(hWnd, SwShowNoActivate);
         }
     }
 
@@ -215,6 +267,51 @@ public static class DesktopInterop
         {
             SendMessageTimeout(progman, 0x052C, IntPtr.Zero, IntPtr.Zero, SmtoNormal, 1000, out _);
         }
+    }
+
+    private static IntPtr FindDesktopDefView()
+    {
+        var progman = FindWindow("Progman", null);
+        if (progman != IntPtr.Zero)
+        {
+            var defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
+            if (defView != IntPtr.Zero)
+            {
+                return defView;
+            }
+        }
+
+        var found = IntPtr.Zero;
+        EnumWindows((topHandle, _) =>
+        {
+            if (!WindowClassEquals(topHandle, "WorkerW"))
+            {
+                return true;
+            }
+
+            var candidate = FindWindowEx(topHandle, IntPtr.Zero, "SHELLDLL_DefView", null);
+            if (candidate == IntPtr.Zero)
+            {
+                return true;
+            }
+
+            found = candidate;
+            return false;
+        }, IntPtr.Zero);
+
+        return found;
+    }
+
+    private static bool WindowClassEquals(IntPtr hWnd, string className)
+    {
+        return string.Equals(GetWindowClassName(hWnd), className, StringComparison.Ordinal);
+    }
+
+    private static string GetWindowClassName(IntPtr hWnd)
+    {
+        var buffer = new StringBuilder(256);
+        var length = GetClassName(hWnd, buffer, buffer.Capacity);
+        return length <= 0 ? string.Empty : buffer.ToString(0, length);
     }
 
     private static Dictionary<string, int> ReadListViewIndexByName(IntPtr listView)
@@ -402,11 +499,17 @@ public static class DesktopInterop
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, int flags, uint timeout, out IntPtr result);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+    [DllImport("user32.dll", EntryPoint = "IsWindowVisible")]
+    private static extern bool IsWindowVisibleNative(IntPtr hWnd);
+
     [DllImport("user32.dll")]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
+    private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -437,4 +540,7 @@ public static class DesktopInterop
 
     [DllImport("user32.dll")]
     private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetParent(IntPtr hWnd);
 }

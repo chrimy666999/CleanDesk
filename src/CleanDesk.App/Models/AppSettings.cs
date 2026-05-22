@@ -2,7 +2,9 @@ namespace CleanDesk.App.Models;
 
 public sealed class AppSettings
 {
-    public string Version { get; set; } = "1.0.0";
+    public const string CurrentVersion = "1.5.0";
+
+    public string Version { get; set; } = CurrentVersion;
     public bool AutoStart { get; set; }
     public bool AutoOrganizeOnStartup { get; set; } = true;
     public bool AutoOrganizeNewFiles { get; set; } = true;
@@ -10,6 +12,7 @@ public sealed class AppSettings
     public bool HideScatteredDesktopIcons { get; set; } = true;
     public bool AutoReflowAfterOrganize { get; set; } = true;
     public bool AllBoxesVisible { get; set; } = true;
+    public bool AutoHideBoxes { get; set; } = true;
     public bool PauseTakeover { get; set; }
     public bool DesktopTakeoverActive { get; set; }
     public bool LastSessionCleanExit { get; set; } = true;
@@ -17,18 +20,18 @@ public sealed class AppSettings
     public DateTime? LastTakeoverUtc { get; set; }
     public int SnapDistance { get; set; } = 14;
     public int GridSize { get; set; } = 16;
-    public int BoxGap { get; set; } = 8;
+    public int BoxGap { get; set; } = 18;
     public int MinBoxWidth { get; set; } = 240;
     public int MinBoxHeight { get; set; } = 38;
     public int MaxBoxWidth { get; set; } = 460;
     public int MaxBoxHeight { get; set; } = 380;
     public int DefaultBoxWidth { get; set; } = 280;
     public int DefaultBoxHeight { get; set; } = 180;
-    public string ActiveLayoutPresetId { get; set; } = "left";
+    public string ActiveLayoutPresetId { get; set; } = "top";
     public int IconSize { get; set; } = 32;
     public bool MatchDesktopIconSize { get; set; } = true;
     public bool ShowFileNames { get; set; } = true;
-    public double GlobalOpacity { get; set; } = 0.72;
+    public double GlobalOpacity { get; set; } = 0.05;
     public string ThemeMode { get; set; } = "glass";
     public string BoxBackgroundColor { get; set; } = "#22303A";
     public string BoxAccentColor { get; set; } = "#7DD3FC";
@@ -38,12 +41,19 @@ public sealed class AppSettings
     public bool EnableBoxCornerRadius { get; set; } = true;
     public int BoxCornerRadius { get; set; } = 12;
     public double TitleBarOpacity { get; set; } = 0.18;
+    public double MagneticAccessOpacity { get; set; } = 0.9;
+    public string MagneticAccessDisplayMode { get; set; } = "List";
+    public double MagneticAccessWidth { get; set; } = 300;
+    public double MagneticAccessHeight { get; set; } = 460;
+    public List<string> MagneticAccessBoxOrder { get; set; } = [];
+    public bool MagneticAccessBoxOrderCustomized { get; set; }
     public bool CompactTitleBar { get; set; }
     public BoxDisplayMode DefaultDisplayMode { get; set; } = BoxDisplayMode.Icon;
     public List<BoxLayoutPreset> LayoutPresets { get; set; } = BoxLayoutPreset.CreateDefaults();
     public List<CategoryRule> Rules { get; set; } = CreateDefaultRules();
     public List<BoxModel> Boxes { get; set; } = [];
     public List<DeskItem> DesktopItems { get; set; } = [];
+    public Dictionary<string, string> ItemBoxOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static List<CategoryRule> CreateDefaultRules()
     {

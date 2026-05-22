@@ -27,6 +27,7 @@ public sealed class TrayService : IDisposable
         menu.Items.Add("显示 / 隐藏所有盒子", null, (_, _) => _controller.ToggleAllBoxes());
         menu.Items.Add("自动整理桌面", null, (_, _) => _controller.OrganizeDesktop("Tray"));
         menu.Items.Add("一键恢复桌面", null, (_, _) => _controller.RestoreDesktop());
+        menu.Items.Add("全局搜索 (Ctrl+空格)", null, (_, _) => _controller.ShowGlobalSearch());
         menu.Items.Add("设置中心", null, (_, _) => _controller.ShowSettings());
         menu.Items.Add(new Forms.ToolStripSeparator());
         var autoStart = new Forms.ToolStripMenuItem("开机自启动") { Checked = _controller.Settings.AutoStart, CheckOnClick = true };

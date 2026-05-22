@@ -25,12 +25,11 @@ public sealed class FileWatcherService : IDisposable
             var watcher = new FileSystemWatcher(root)
             {
                 IncludeSubdirectories = false,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.CreationTime
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.CreationTime
             };
             watcher.Created += OnFileEvent;
             watcher.Deleted += OnFileEvent;
             watcher.Renamed += OnFileEvent;
-            watcher.Changed += OnFileEvent;
             watcher.EnableRaisingEvents = true;
             _watchers.Add(watcher);
         }

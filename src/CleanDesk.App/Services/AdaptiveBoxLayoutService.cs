@@ -12,7 +12,13 @@ public sealed class AdaptiveBoxLayoutService
     private const int PaddingY = 16;
     private const int MinimumVisibleWidth = 180;
     private const int MinimumExpandedHeight = 96;
-    private const int DefaultCompactGap = 8;
+    private const int DefaultCompactGap = 18;
+    private const int TitleButtonCount = 6;
+    private const double HorizontalTitleButtonStride = 26;
+    private const double HorizontalTitleChromePadding = 48;
+    private const double VerticalTitleButtonStride = 26;
+    private const double VerticalTitleChromePadding = 40;
+    private const double VerticalTitleCharacterHeight = 16;
 
     public void Apply(AppSettings settings, Func<BoxModel, int> itemCountProvider, bool force)
     {
@@ -38,11 +44,40 @@ public sealed class AdaptiveBoxLayoutService
             }
 
             var size = CalculateSize(settings, count);
-            box.IsCollapsed = preset.CollapseEmptyBoxes && count == 0;
-            box.Bounds.Width = size.Width;
-            box.Bounds.Height = box.IsCollapsed ? settings.MinBoxHeight : size.Height;
-            box.LastExpandedWidth = size.Width;
-            box.LastExpandedHeight = size.Height;
+            box.IsCollapsed = settings.AutoHideBoxes || (preset.CollapseEmptyBoxes && count == 0);
+            if (settings.AutoHideBoxes && (force || !box.HasUserLayout))
+            {
+                box.DockEdge = BoxLayoutService.GetDefaultDockEdge(box.Name);
+            }
+
+            var requiredTitleLength = EstimateTitleLength(box.Name, box.DockEdge);
+            if (settings.AutoHideBoxes)
+            {
+                if (box.DockEdge == BoxDockEdge.Top)
+                {
+                    box.TitleLength = Math.Max(requiredTitleLength, size.Width);
+                    box.Bounds.Width = box.TitleLength;
+                    box.Bounds.Height = box.IsCollapsed ? settings.MinBoxHeight : size.Height;
+                    box.LastExpandedWidth = box.TitleLength;
+                    box.LastExpandedHeight = size.Height;
+                }
+                else
+                {
+                    box.TitleLength = Math.Max(requiredTitleLength, size.Height);
+                    box.Bounds.Width = size.Width;
+                    box.Bounds.Height = box.TitleLength;
+                    box.LastExpandedWidth = size.Width;
+                    box.LastExpandedHeight = box.TitleLength;
+                }
+            }
+            else
+            {
+                box.TitleLength = requiredTitleLength;
+                box.Bounds.Width = size.Width;
+                box.Bounds.Height = box.IsCollapsed ? settings.MinBoxHeight : size.Height;
+                box.LastExpandedWidth = size.Width;
+                box.LastExpandedHeight = size.Height;
+            }
         }
 
         Arrange(settings, preset, boxes.Where(box => force || !box.HasUserLayout).ToList(), counts);
@@ -65,10 +100,10 @@ public sealed class AdaptiveBoxLayoutService
 
         foreach (var preset in settings.LayoutPresets.Where(preset => preset.Id is "left" or "right" or "top" or "bottom"))
         {
-            preset.Gap = Math.Clamp(preset.Gap <= 0 ? DefaultCompactGap : preset.Gap, 6, 10);
+            preset.Gap = Math.Clamp(preset.Gap <= 10 ? DefaultCompactGap : preset.Gap, 12, 28);
         }
 
-        settings.BoxGap = Math.Clamp(settings.BoxGap <= 0 ? DefaultCompactGap : settings.BoxGap, 6, 10);
+        settings.BoxGap = Math.Clamp(settings.BoxGap <= 10 ? DefaultCompactGap : settings.BoxGap, 12, 28);
 
         if (settings.LayoutPresets.All(preset => preset.Id != settings.ActiveLayoutPresetId))
         {
@@ -99,6 +134,29 @@ public sealed class AdaptiveBoxLayoutService
         width = Math.Clamp(width, settings.MinBoxWidth, settings.MaxBoxWidth);
         height = Math.Clamp(height, Math.Max(MinimumExpandedHeight, settings.MinBoxHeight), settings.MaxBoxHeight);
         return (width, height);
+    }
+
+    private static double EstimateTitleLength(string title, BoxDockEdge edge)
+    {
+        var text = string.IsNullOrWhiteSpace(title) ? "盒子" : title.Trim();
+        if (edge != BoxDockEdge.Top)
+        {
+            var verticalLength = TitleButtonCount * VerticalTitleButtonStride +
+                                 VerticalTitleChromePadding +
+                                 text.Length * VerticalTitleCharacterHeight;
+            return Math.Clamp(verticalLength, 244, 420);
+        }
+
+        var textWidth = 0.0;
+        foreach (var ch in text)
+        {
+            textWidth += ch > 255 ? 14 : 7;
+        }
+
+        var horizontalLength = TitleButtonCount * HorizontalTitleButtonStride +
+                               HorizontalTitleChromePadding +
+                               textWidth;
+        return Math.Clamp(horizontalLength, 220, 420);
     }
 
     private static void Arrange(AppSettings settings, BoxLayoutPreset preset, List<BoxModel> boxes, Dictionary<string, int> itemCounts)
@@ -138,7 +196,7 @@ public sealed class AdaptiveBoxLayoutService
     private static int ResolveGap(AppSettings settings, BoxLayoutPreset preset)
     {
         var presetGap = preset.Gap <= 0 ? settings.BoxGap : preset.Gap;
-        return Math.Clamp(Math.Min(settings.BoxGap <= 0 ? DefaultCompactGap : settings.BoxGap, presetGap), 6, 10);
+        return Math.Clamp(Math.Min(settings.BoxGap <= 0 ? DefaultCompactGap : settings.BoxGap, presetGap), 12, 28);
     }
 
     private static WorkArea GetPrimaryWorkArea()
@@ -176,6 +234,25 @@ public sealed class AdaptiveBoxLayoutService
             {
                 box.LastExpandedWidth = box.Bounds.Width;
                 box.LastExpandedHeight = box.Bounds.Height;
+            }
+
+            if (settings.AutoHideBoxes)
+            {
+                var requiredTitleLength = EstimateTitleLength(box.Name, box.DockEdge);
+                if (box.DockEdge == BoxDockEdge.Top)
+                {
+                    box.TitleLength = Math.Clamp(Math.Max(requiredTitleLength, Math.Max(box.TitleLength, box.Bounds.Width)), 120, usableWidth);
+                    box.Bounds.Width = box.TitleLength;
+                    box.LastExpandedWidth = box.TitleLength;
+                    box.LastExpandedHeight = Math.Clamp(Math.Max(box.LastExpandedHeight, box.Bounds.Height), MinimumExpandedHeight, usableHeight);
+                }
+                else
+                {
+                    box.TitleLength = Math.Clamp(Math.Max(requiredTitleLength, Math.Max(box.TitleLength, box.Bounds.Height)), 120, usableHeight);
+                    box.Bounds.Height = box.TitleLength;
+                    box.LastExpandedHeight = box.TitleLength;
+                    box.LastExpandedWidth = Math.Clamp(Math.Max(box.LastExpandedWidth, box.Bounds.Width), minWidth, usableWidth);
+                }
             }
         }
     }

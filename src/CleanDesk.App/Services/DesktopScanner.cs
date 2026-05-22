@@ -7,15 +7,15 @@ public sealed class DesktopScanner
 {
     private static readonly string[] DefaultBoxNames =
     [
+        "最近常用",
         "快捷方式",
         "目录",
         "文档",
         "图片",
         "音乐视频",
         "压缩包",
-        "最近常用",
         "今日文件",
-        "临时收纳区",
+        "临时工作区",
         "其他"
     ];
 
@@ -78,7 +78,9 @@ public sealed class DesktopScanner
                     CreatedUtc = isDirectory ? dirInfo!.CreationTimeUtc : info!.CreationTimeUtc,
                     LastAccessUtc = isDirectory ? dirInfo!.LastAccessTimeUtc : info!.LastAccessTimeUtc,
                     LastWriteUtc = isDirectory ? dirInfo!.LastWriteTimeUtc : info!.LastWriteTimeUtc,
+                    LastClickedUtc = old?.LastClickedUtc,
                     LastOpenedUtc = old?.LastOpenedUtc,
+                    ClickCount = old?.ClickCount ?? 0,
                     OpenCount = old?.OpenCount ?? 0
                 };
 
@@ -101,7 +103,7 @@ public sealed class DesktopScanner
         var existing = settings.Boxes.ToDictionary(box => box.Name, StringComparer.CurrentCultureIgnoreCase);
         var width = settings.DefaultBoxWidth;
         var height = settings.DefaultBoxHeight;
-        var gap = Math.Clamp(settings.BoxGap <= 0 ? 8 : settings.BoxGap, 6, 10);
+        var gap = Math.Clamp(settings.BoxGap <= 0 ? 18 : settings.BoxGap, 12, 28);
         var placementColumns = Math.Max(1, Math.Min(3, (int)Math.Floor((workArea.Width + gap) / (width + gap))));
         while (placementColumns > 1)
         {
@@ -140,6 +142,7 @@ public sealed class DesktopScanner
                 LastExpandedHeight = height,
                 Opacity = settings.GlobalOpacity,
                 IsCollapsed = true,
+                DockEdge = BoxLayoutService.GetDefaultDockEdge(name),
                 DisplayMode = settings.DefaultDisplayMode
             });
             addedIndex++;
@@ -167,6 +170,18 @@ public sealed class DesktopScanner
     private static void AssignItemsToBoxes(AppSettings settings, List<DeskItem> items)
     {
         var boxByName = settings.Boxes.ToDictionary(box => box.Name, StringComparer.CurrentCultureIgnoreCase);
+        var boxById = settings.Boxes.ToDictionary(box => box.Id, StringComparer.OrdinalIgnoreCase);
+        settings.ItemBoxOverrides ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var visiblePaths = items.Select(item => item.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in settings.ItemBoxOverrides.Keys.ToArray())
+        {
+            if (!visiblePaths.Contains(path) ||
+                !boxById.TryGetValue(settings.ItemBoxOverrides[path], out var overrideBox) ||
+                overrideBox.Kind != BoxKind.Normal)
+            {
+                settings.ItemBoxOverrides.Remove(path);
+            }
+        }
         foreach (var box in settings.Boxes.Where(box => box.Kind == BoxKind.Normal))
         {
             box.ItemPaths.Clear();
@@ -174,7 +189,13 @@ public sealed class DesktopScanner
 
         foreach (var item in items)
         {
-            if (!boxByName.TryGetValue(item.Category, out var box))
+            if (settings.ItemBoxOverrides.TryGetValue(item.Path, out var overrideBoxId) &&
+                boxById.TryGetValue(overrideBoxId, out var box) &&
+                box.Kind == BoxKind.Normal)
+            {
+                item.Category = box.Name;
+            }
+            else if (!boxByName.TryGetValue(item.Category, out box))
             {
                 box = boxByName.TryGetValue("其他", out var fallback) ? fallback : settings.Boxes.First();
             }
@@ -209,7 +230,7 @@ public sealed class DesktopScanner
             CategoryRuleType.Extension => Split(rule.Pattern).Contains(item.Extension, StringComparer.OrdinalIgnoreCase),
             CategoryRuleType.Keyword => !string.IsNullOrWhiteSpace(rule.Pattern) && item.DisplayName.Contains(rule.Pattern, StringComparison.CurrentCultureIgnoreCase),
             CategoryRuleType.Wildcard => WildcardMatches(rule.Pattern, item.Name),
-            CategoryRuleType.Recent => item.OpenCount > 0,
+            CategoryRuleType.Recent => item.OpenCount > 0 || item.ClickCount > 0,
             _ => false
         };
     }

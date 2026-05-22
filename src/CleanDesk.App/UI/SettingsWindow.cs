@@ -5,7 +5,6 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Forms = System.Windows.Forms;
 using WpfButton = System.Windows.Controls.Button;
-using WpfComboBox = System.Windows.Controls.ComboBox;
 
 namespace CleanDesk.App.UI;
 
@@ -14,7 +13,6 @@ public sealed class SettingsWindow : Window
     private readonly CleanDeskController _controller;
     private readonly ContentControl _content = new();
     private readonly string[] _tabs = ["常规", "分类", "主题", "盒子", "映射", "备份", "高级", "关于"];
-    private readonly Dictionary<string, WpfButton> _presetButtons = new(StringComparer.OrdinalIgnoreCase);
 
     public SettingsWindow(CleanDeskController controller)
     {
@@ -153,14 +151,14 @@ public sealed class SettingsWindow : Window
     {
         var panel = Page("主题");
         panel.Children.Add(ActionRow(("玻璃", () => ApplyThemePreset("glass")), ("纯透明", () => ApplyThemePreset("transparent")), ("纯色", () => ApplyThemePreset("solid"))));
-        panel.Children.Add(Slider("全局透明度", _controller.Settings.GlobalOpacity, 0.25, 0.95, value =>
+        panel.Children.Add(Slider("全局透明度", _controller.Settings.GlobalOpacity, 0.05, 1.0, value =>
         {
             _controller.Settings.GlobalOpacity = value;
             foreach (var box in _controller.Settings.Boxes)
             {
                 box.Opacity = value;
             }
-            _controller.ShowBoxes();
+            _controller.RefreshBoxVisuals();
         }));
         panel.Children.Add(Slider("图标大小", _controller.Settings.IconSize, 24, 72, value =>
         {
@@ -188,15 +186,25 @@ public sealed class SettingsWindow : Window
             _controller.Settings.BoxCornerRadius = (int)value;
             _controller.ShowBoxes();
         }));
-        panel.Children.Add(Slider("标题栏透明度", _controller.Settings.TitleBarOpacity, 0.05, 0.35, value =>
+        panel.Children.Add(Slider("标题栏透明度", _controller.Settings.TitleBarOpacity, 0.02, 0.65, value =>
         {
             _controller.Settings.TitleBarOpacity = value;
-            _controller.ShowBoxes();
+            _controller.RefreshBoxVisuals();
         }));
+        panel.Children.Add(Slider("磁力访问窗背景透明度", _controller.Settings.MagneticAccessOpacity, 0.05, 0.95, value =>
+        {
+            _controller.Settings.MagneticAccessOpacity = value;
+        }));
+        panel.Children.Add(ActionRow(("访问窗列表模式", () => SetMagneticAccessDisplayMode("List")), ("访问窗紧凑模式", () => SetMagneticAccessDisplayMode("Compact")), ("访问窗图标模式", () => SetMagneticAccessDisplayMode("Icon"))));
         panel.Children.Add(Check("紧凑标题栏", _controller.Settings.CompactTitleBar, value =>
         {
             _controller.Settings.CompactTitleBar = value;
             _controller.ShowBoxes();
+        }));
+        panel.Children.Add(Check("盒子默认隐藏，鼠标悬停时展开", _controller.Settings.AutoHideBoxes, value =>
+        {
+            _controller.Settings.AutoHideBoxes = value;
+            _controller.ApplyLayoutPreset(_controller.Settings.ActiveLayoutPresetId, true);
         }));
         panel.Children.Add(Text("主题模式已扩展为可调玻璃、纯透明和纯色三种，颜色和圆角会直接作用于盒子视觉层。"));
         return Wrap(panel);
@@ -211,85 +219,14 @@ public sealed class SettingsWindow : Window
             list.Items.Add($"{box.Name}  {box.Kind}  {box.DisplayMode}  {box.Bounds.Width:0}x{box.Bounds.Height:0}");
         }
         panel.Children.Add(list);
-        panel.Children.Add(ActionRow(("创建盒子", _controller.CreateBox), ("创建映射盒子", _controller.CreateMappedBox), ("按当前规则重排", () => _controller.ApplyLayoutPreset(_controller.Settings.ActiveLayoutPresetId, true))));
-        panel.Children.Add(Text("默认排列预设会按当前屏幕可用工作区重新紧凑排布全部盒子。"));
-        var presetRow = new WrapPanel { Margin = new Thickness(0, 4, 0, 10) };
-        foreach (var preset in _controller.Settings.LayoutPresets)
-        {
-            var button = new WpfButton
-            {
-                Content = preset.Name,
-                Height = 32,
-                MinWidth = 92,
-                Margin = new Thickness(0, 0, 8, 8),
-                Padding = new Thickness(10, 0, 10, 0)
-            };
-            button.Click += (_, _) =>
-            {
-                _controller.ApplyLayoutPreset(preset.Id, true);
-                Select("盒子");
-            };
-            _presetButtons[preset.Id] = button;
-            presetRow.Children.Add(button);
-        }
-        panel.Children.Add(presetRow);
-        panel.Children.Add(ActionRow(("新增预设", () =>
-        {
-            var name = Microsoft.VisualBasic.Interaction.InputBox("输入预设名称：", "新增排列预设", "自定义排列");
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                return;
-            }
-
-            using var dialog = new Forms.Form { Text = "选择排列方向", Width = 280, Height = 180, StartPosition = Forms.FormStartPosition.CenterParent };
-            var combo = new Forms.ComboBox { DropDownStyle = Forms.ComboBoxStyle.DropDownList, Left = 18, Top = 20, Width = 220 };
-            combo.Items.AddRange(["全部向左对齐", "全部向右对齐", "全部向上对齐", "全部向下对齐"]);
-            combo.SelectedIndex = 0;
-            var ok = new Forms.Button { Text = "确定", Left = 54, Top = 62, Width = 72, DialogResult = Forms.DialogResult.OK };
-            var cancel = new Forms.Button { Text = "取消", Left = 136, Top = 62, Width = 72, DialogResult = Forms.DialogResult.Cancel };
-            dialog.Controls.Add(combo);
-            dialog.Controls.Add(ok);
-            dialog.Controls.Add(cancel);
-            dialog.AcceptButton = ok;
-            dialog.CancelButton = cancel;
-            if (dialog.ShowDialog() != Forms.DialogResult.OK)
-            {
-                return;
-            }
-
-            var alignment = combo.SelectedIndex switch
-            {
-                1 => BoxLayoutAlignment.Right,
-                2 => BoxLayoutAlignment.Top,
-                3 => BoxLayoutAlignment.Bottom,
-                _ => BoxLayoutAlignment.Left
-            };
-            var preset = _controller.AddLayoutPreset(name.Trim(), alignment);
-            _controller.ApplyLayoutPreset(preset.Id, true);
-            Select("盒子");
-        }), ("删除当前预设", () =>
-        {
-            if (_controller.DeleteLayoutPreset(_controller.Settings.ActiveLayoutPresetId))
-            {
-                _controller.ApplyLayoutPreset(_controller.Settings.ActiveLayoutPresetId, true);
-                Select("盒子");
-            }
-        })));
+        panel.Children.Add(ActionRow(("创建盒子", _controller.CreateBox), ("创建映射盒子", _controller.CreateMappedBox), ("恢复默认三边界布局", _controller.ResetDefaultBoundaryLayout)));
+        panel.Children.Add(Text("默认布局已改为上、左、右三边界隐藏标题栏；旧版排列预设不再作为主要入口。"));
         panel.Children.Add(Slider("磁吸距离", _controller.Settings.SnapDistance, 4, 32, value => _controller.Settings.SnapDistance = (int)value));
-        panel.Children.Add(Slider("盒子间距", _controller.Settings.BoxGap, 6, 14, value => _controller.Settings.BoxGap = (int)value));
+        panel.Children.Add(Slider("盒子间距", _controller.Settings.BoxGap, 12, 28, value => _controller.Settings.BoxGap = (int)value));
         panel.Children.Add(Slider("默认盒子宽度", _controller.Settings.DefaultBoxWidth, 180, 520, value => _controller.Settings.DefaultBoxWidth = (int)value));
         panel.Children.Add(Slider("默认盒子高度", _controller.Settings.DefaultBoxHeight, 96, 420, value => _controller.Settings.DefaultBoxHeight = (int)value));
         panel.Children.Add(Slider("自动排列网格", _controller.Settings.GridSize, 4, 64, value => _controller.Settings.GridSize = (int)value));
-        var activePreset = _controller.Settings.LayoutPresets.FirstOrDefault(preset => preset.Id == _controller.Settings.ActiveLayoutPresetId);
-        if (activePreset is not null)
-        {
-            panel.Children.Add(Check("空盒子自动最小化", activePreset.CollapseEmptyBoxes, value =>
-            {
-                activePreset.CollapseEmptyBoxes = value;
-                _controller.ApplyLayoutPreset(activePreset.Id, true);
-            }));
-        }
-        panel.Children.Add(Text("组合盒子的数据结构已预留 Tabs，可在后续版本接入拖拽合并与标签分离。"));
+        panel.Children.Add(Text("盒子标题栏支持搜索、锁定、终端入口和悬停展开；边界盒子会按当前工作区重新约束在屏幕内。"));
         return Wrap(panel);
     }
 
@@ -428,6 +365,12 @@ public sealed class SettingsWindow : Window
         _controller.ShowBoxes();
     }
 
+    private void SetMagneticAccessDisplayMode(string mode)
+    {
+        _controller.Settings.MagneticAccessDisplayMode = mode;
+        _controller.SaveSettings();
+    }
+
     private FrameworkElement ColorRow(string label, string value, Action<string> changed)
     {
         var panel = new DockPanel { Margin = new Thickness(0, 8, 0, 8), LastChildFill = true };
@@ -515,7 +458,7 @@ public sealed class SettingsWindow : Window
     private FrameworkElement Slider(string label, double value, double min, double max, Action<double> changed)
     {
         var panel = new DockPanel { Margin = new Thickness(0, 10, 0, 12) };
-        var text = Text($"{label}: {value:0.##}");
+        var text = Text($"{label}: {FormatSliderValue(label, value)}");
         DockPanel.SetDock(text, Dock.Top);
         panel.Children.Add(text);
         var slider = new Slider
@@ -530,11 +473,16 @@ public sealed class SettingsWindow : Window
         slider.ValueChanged += (_, _) =>
         {
             changed(slider.Value);
-            text.Text = $"{label}: {slider.Value:0.##}";
+            text.Text = $"{label}: {FormatSliderValue(label, slider.Value)}";
             _controller.SaveSettings();
         };
         panel.Children.Add(slider);
         return panel;
+    }
+
+    private static string FormatSliderValue(string label, double value)
+    {
+        return label.Contains("透明度", StringComparison.Ordinal) ? $"{value:P0}" : $"{value:0.##}";
     }
 
     private static FrameworkElement ActionRow(params (string Text, Action Action)[] actions)

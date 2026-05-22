@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.VisualBasic.FileIO;
 using Forms = System.Windows.Forms;
 
@@ -59,12 +60,22 @@ public static class ShellOperations
 
     public static void CopyFileDrop(string path, bool cut)
     {
-        if (!Exists(path))
+        CopyFileDrop([path], cut);
+    }
+
+    public static void CopyFileDrop(IEnumerable<string> paths, bool cut)
+    {
+        var existingPaths = paths
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (existingPaths.Length == 0)
         {
             return;
         }
 
-        var files = new StringCollection { path };
+        var files = new StringCollection();
+        files.AddRange(existingPaths);
         var data = new Forms.DataObject();
         data.SetFileDropList(files);
         using var stream = new MemoryStream([(byte)(cut ? 2 : 5), 0, 0, 0]);
